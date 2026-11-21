@@ -1,0 +1,22 @@
+x-app: &app
+  build:
+    context: .
+    args:
+      UID: ${UID:-1000}
+  image: squarex
+  network_mode: host
+  env_file: .env
+  volumes:
+    - ./logs:/app/logs
+    - ./runtime:/app/runtime
+    - ${SSH_KEY_PATH}:/ssh/id:ro
+    - ${SSH_KNOWN_HOSTS}:/ssh/known_hosts:ro
+
+services:
+  gateway:
+    <<: *app
+    command: python -m squarex gateway
+
+  ui:
+    <<: *app
+    command: python -m squarex ui

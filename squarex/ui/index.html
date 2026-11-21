@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>squarex</title>
+<style>
+  :root { --bg: #f7f7f5; --card: #fff; --ink: #1b1b1b; --muted: #6b6b66; --line: #e3e3de; --accent: #2f6fde; --bad: #c23b3b; --ok: #1f8a4c; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #151514; --card: #1f1f1d; --ink: #ececea; --muted: #9a9a94; --line: #34342f; --accent: #6c9cff; --bad: #ff6b6b; --ok: #4cc27e; } }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, sans-serif; }
+  main { max-width: 920px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  h1 { font-size: 18px; margin: 0; } h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+  input[type=text] { flex: 1; min-width: 200px; font: inherit; color: inherit; background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; }
+  input[type=number] { width: 70px; font: inherit; color: inherit; background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+  button { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--accent); }
+  button.stop { background: var(--bad); border-color: var(--bad); font-weight: 700; }
+  table { border-collapse: collapse; } td { padding: 2px 12px 2px 0; vertical-align: top; } td:first-child { color: var(--muted); }
+  pre { margin: 6px 0 0; white-space: pre-wrap; font: 12px/1.45 ui-monospace, monospace; }
+  .job { border-top: 1px solid var(--line); padding: 8px 0; } .job:first-child { border-top: 0; }
+  .cmd { font: 12px ui-monospace, monospace; color: var(--accent); } .err { color: var(--bad); } .ok { color: var(--ok); }
+</style>
+</head>
+<body>
+<main>
+  <h1>squarex</h1>
+  <section>
+    <h2>Robot</h2>
+    <table id="status"><tr><td>loading…</td></tr></table>
+  </section>
+  <section>
+    <h2>Commands</h2>
+    <div class="row">
+      <input id="prompt" type="text" placeholder="prompt, e.g. pick up the can">
+      <label>max <input id="seconds" type="number" value="90" min="10" max="600"> s</label>
+      <label><input id="ready" type="checkbox" checked> ready pose first</label>
+    </div>
+    <div class="row">
+      <button onclick="startRun()">Start</button>
+      <button class="stop" onclick="run(['stop'])">Stop</button>
+      <button class="ghost" onclick="run(['prompt', prompt.value])">Change prompt</button>
+      <button class="ghost" onclick="run(['home'])">Go home</button>
+      <button class="ghost" onclick="run(['clear-bus-error'])">Clear bus error</button>
+    </div>
+  </section>
+  <section>
+    <h2>CLI commands and output</h2>
+    <div id="jobs"></div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+
+async function run(args) {
+  await fetch("/api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ args }) });
+  refreshJobs();
+}
+
+function startRun() {
+  const args = ["start", $("prompt").value, "--seconds", $("seconds").value];
+  if (!$("ready").checked) args.push("--no-ready-pose");
+  run(args);
+}
+
+async function refreshStatus() {
+  const status = await (await fetch("/api/status")).json();
+  $("status").innerHTML = "";
+  for (const [key, value] of Object.entries(status)) {
+    const row = $("status").insertRow();
+    row.insertCell().textContent = key;
+    const cell = row.insertCell();
+    cell.textContent = typeof value === "object" ? JSON.stringify(value) : value;
+    if (key === "error" || (key === "healthy" && !value)) cell.className = "err";
+    if (key === "healthy" && value) cell.className = "ok";
+  }
+}
+
+async function refreshJobs() {
+  const jobs = await (await fetch("/api/jobs")).json();
+  $("jobs").innerHTML = "";
+  for (const job of jobs) {
+    const box = document.createElement("div");
+    box.className = "job";
+    const state = job.running ? "running" : job.exit_code === 0 ? "done" : `failed (${job.exit_code})`;
+    box.innerHTML = `<div class="cmd"></div><pre></pre>`;
+    box.querySelector(".cmd").textContent = `$ ${job.command}   [${state}]`;
+    box.querySelector("pre").textContent = job.output.join("\n");
+    if (!job.running && job.exit_code !== 0) box.querySelector("pre").className = "err";
+    $("jobs").appendChild(box);
+  }
+}
+
+setInterval(refreshStatus, 2000);
+setInterval(refreshJobs, 1000);
+refreshStatus(); refreshJobs();
+</script>
+</body>
+</html>
