@@ -65,7 +65,7 @@ def _move_to_ready_pose(bridge: RosBridge, settings: Settings, say: Say) -> None
         say("ready pose reached")
     finally:
         _end_inference(bridge, say)
-        runtime.set_mode(runtime.CLOUD)
+        runtime.set_mode(runtime.INFERENCE)
 
 
 def _supervise(bridge: RosBridge, seconds: int, say: Say) -> None:
@@ -82,10 +82,11 @@ def _supervise(bridge: RosBridge, seconds: int, say: Say) -> None:
     say(f"time limit of {seconds} s reached")
 
 
-def start(settings: Settings, prompt: str, seconds: int, use_ready_pose: bool, say: Say) -> None:
+def start(settings: Settings, model: str, prompt: str, seconds: int, use_ready_pose: bool, say: Say) -> None:
     with connect(settings) as bridge:
         _require_idle_and_healthy(bridge)
-        say(f"run {runtime.new_run()}: {prompt!r}, at most {seconds} s")
+        say(f"run {runtime.new_run()} with the {model} model: {prompt!r}, at most {seconds} s")
+        runtime.set_model(model)
         runtime.set_prompt(prompt)
         if use_ready_pose:
             _move_to_ready_pose(bridge, settings, say)

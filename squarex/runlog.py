@@ -6,8 +6,11 @@ from squarex.arrays import to_list
 from squarex.config import LOG_DIR
 
 
+LONG_TEXT = 1000
+
+
 def jsonable(value):
-    """Make a decoded msgpack message printable as JSON: arrays become lists, raw bytes become their size."""
+    """Make a decoded msgpack message printable as JSON: arrays become lists, images become their size."""
     if isinstance(value, dict):
         if value.get("nd", value.get(b"nd")) is True:
             return to_list(value)
@@ -16,12 +19,15 @@ def jsonable(value):
         return [jsonable(item) for item in value]
     if isinstance(value, (bytes, bytearray)):
         return f"<{len(value)} bytes>"
+    if isinstance(value, str) and len(value) > LONG_TEXT:
+        return f"<{len(value)} characters>"
     return value
 
 
 class RunLog:
     def __init__(self, run_id: str, stream: str):
         self.dir = LOG_DIR / run_id
+        self.stream = stream
         (self.dir / "images").mkdir(parents=True, exist_ok=True)
         self._file = (self.dir / f"{stream}.jsonl").open("a")
 
@@ -31,7 +37,7 @@ class RunLog:
         self._file.flush()
 
     def save_image(self, step: int, view: str, jpeg: bytes) -> str:
-        name = f"images/{step:03d}-{view}.jpg"
+        name = f"images/{self.stream}-{step:03d}-{view}.jpg"
         (self.dir / name).write_bytes(jpeg)
         return name
 

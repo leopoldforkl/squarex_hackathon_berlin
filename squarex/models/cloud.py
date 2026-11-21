@@ -1,21 +1,12 @@
-"""Observation / Actions <-> WALLX public_v2 messages."""
-import io
-
-from PIL import Image
-
+"""WALLX cloud model: Observation / Actions <-> public_v2."""
 from squarex.arrays import to_list
-from squarex.config import EMBODIMENT, IMAGE_LONG_SIDE, IMAGE_QUALITY
+from squarex.config import EMBODIMENT, GRIPPER_RANGE, Settings
+from squarex.models.socket import ModelSocket
 from squarex.robot.client_format import Actions, Observation
 
-GRIPPER_RANGE = (0.0, 1.5260001)
 
-
-def compress(jpeg: bytes) -> bytes:
-    with Image.open(io.BytesIO(jpeg)) as image:
-        image.thumbnail((IMAGE_LONG_SIDE, IMAGE_LONG_SIDE), Image.Resampling.BOX)
-        output = io.BytesIO()
-        image.convert("RGB").save(output, "JPEG", quality=IMAGE_QUALITY)
-    return output.getvalue()
+def connect(settings: Settings) -> ModelSocket:
+    return ModelSocket(settings.wallx_url, headers={"Authorization": f"Bearer {settings.wallx_api_key}"})
 
 
 def build_request(observation: Observation, prompt: str) -> dict:
@@ -24,7 +15,7 @@ def build_request(observation: Observation, prompt: str) -> dict:
         "normalization": "provided",
         "instruction": prompt,
         "observation": {
-            "images": {view: compress(jpeg) for view, jpeg in observation.images.items()},
+            "images": observation.images,
             "state": {
                 f"{arm}_ee": {"position": pose[:3], "rotation_rpy": pose[3:6], "gripper": pose[6]}
                 for arm, pose in observation.arms.items()

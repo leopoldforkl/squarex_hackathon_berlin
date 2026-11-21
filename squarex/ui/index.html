@@ -13,6 +13,7 @@
   h1 { font-size: 18px; margin: 0; } h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
   input[type=text] { flex: 1; min-width: 200px; font: inherit; color: inherit; background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; }
+  select { font: inherit; color: inherit; background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
   input[type=number] { width: 70px; font: inherit; color: inherit; background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
   button { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
   button.ghost { background: transparent; color: var(--accent); }
@@ -34,6 +35,7 @@
     <h2>Commands</h2>
     <div class="row">
       <input id="prompt" type="text" placeholder="prompt, e.g. pick up the can">
+      <label>model <select id="model"><option value="cloud">cloud</option><option value="local">local</option></select></label>
       <label>max <input id="seconds" type="number" value="90" min="10" max="600"> s</label>
       <label><input id="ready" type="checkbox" checked> ready pose first</label>
     </div>
@@ -59,7 +61,7 @@ async function run(args) {
 }
 
 function startRun() {
-  const args = ["start", $("prompt").value, "--seconds", $("seconds").value];
+  const args = ["start", $("prompt").value, "--model", $("model").value, "--seconds", $("seconds").value];
   if (!$("ready").checked) args.push("--no-ready-pose");
   run(args);
 }

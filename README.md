@@ -1,7 +1,7 @@
 # squarex hackathon berlin
 
-Runs the squarex desktop robot (two arms, three cameras) with the **WALLX cloud model**.
-A CLI does all the work; the web page only calls the CLI.
+Runs the squarex desktop robot (two arms, three cameras) with the **WALLX cloud model** or a
+**local wall-x model server**. A CLI does all the work; the web page only calls the CLI.
 
 ```
            laptop                                                      robot (192.168.77.2)
@@ -11,7 +11,9 @@ A CLI does all the work; the web page only calls the CLI.
 │                                               │            │                               │
 │ gateway ◄────────────────────────────────────┼──msgpack───│ robot client (cameras + arms)  │
 │   ├─ robot/client_format  (robot ⇄ Observation/Actions)    └───────────────────────────────┘
-│   └─ cloud/protocol + wallx ──public_v2/wss──► WALLX cloud model
+│   ├─ images               (all cameras → 448 px)
+│   └─ models/cloud ──public_v2/wss──► WALLX cloud model
+│      models/local ──robot layout/ws──► local wall-x server
 └──────────────────────────────────────────────┘
 ```
 
@@ -27,7 +29,8 @@ make up                 # gateway + ui (http://127.0.0.1:8080)
 
 ```bash
 make cli ARGS='status'
-make cli ARGS='start "pick up the can" --seconds 90'   # ready pose first, then the model
+make cli ARGS='start "pick up the can" --seconds 90'   # ready pose first, then the cloud model
+make cli ARGS='start "pick up the can" --model local'  # same with the local model server
 make cli ARGS='prompt "put the can on the book"'       # takes effect at the next model step
 make cli ARGS='stop'
 make cli ARGS='home'
@@ -47,9 +50,11 @@ make cli ARGS='clear-bus-error'                         # CAN adapters dropped o
 | `squarex/robot/procedures.py` | start, stop, home, ready pose, clear bus error |
 | `squarex/robot/client_format.py` | robot client messages ⇄ `Observation` / `Actions` |
 | `squarex/robot/ready_pose.py` | step-limited moves to the ready pose |
-| `squarex/cloud/protocol.py` | `Observation` / `Actions` ⇄ WALLX public_v2 |
-| `squarex/cloud/wallx.py` | WALLX WebSocket client |
-| `squarex/gateway.py` | robot client ⇄ cloud, one step at a time |
+| `squarex/models/socket.py` | msgpack WebSocket to a model server |
+| `squarex/models/cloud.py` | `Observation` / `Actions` ⇄ WALLX public_v2 |
+| `squarex/models/local.py` | `Observation` / `Actions` ⇄ local wall-x server (robot client layout) |
+| `squarex/images.py` | camera images → 448 px JPEG for both models |
+| `squarex/gateway.py` | robot client ⇄ model, one step at a time |
 | `squarex/ui/` | web page that runs CLI commands |
 | `squarex/config.py` | `.env` settings and robot/model constants |
 
@@ -57,9 +62,10 @@ make cli ARGS='clear-bus-error'                         # CAN adapters dropped o
 
 ```
 logs/ros.jsonl                      every ROS service call: request and response
-logs/<run>/cloud.jsonl              per model step: robot → laptop → cloud → laptop → robot
+logs/<run>/cloud.jsonl              per model step: robot → laptop → model → laptop → robot
+logs/<run>/local.jsonl              same for the local model
 logs/<run>/ready.jsonl              moves to the ready pose
-logs/<run>/images/<step>-<view>.jpg images as sent to the cloud
+logs/<run>/images/<model>-<step>-<view>.jpg   images as sent to the model (448 px)
 ```
 
 ## Coordinates

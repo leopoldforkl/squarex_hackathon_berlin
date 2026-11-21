@@ -4,7 +4,7 @@ import time
 from squarex.config import RUNTIME_DIR
 
 READY = "ready"
-CLOUD = "cloud"
+INFERENCE = "inference"
 
 
 def _write(name: str, value: str) -> None:
@@ -25,12 +25,20 @@ def prompt() -> str:
     return _read("prompt", "")
 
 
+def set_model(model: str) -> None:
+    _write("model", model)
+
+
+def model() -> str:
+    return _read("model", "cloud")
+
+
 def set_mode(mode: str) -> None:
     _write("mode", mode)
 
 
 def mode() -> str:
-    return _read("mode", CLOUD)
+    return _read("mode", INFERENCE)
 
 
 def new_run() -> str:

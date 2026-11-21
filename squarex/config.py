@@ -24,6 +24,7 @@ INFER_PARAMS = {
 }
 IMAGE_LONG_SIDE = 448
 IMAGE_QUALITY = 80
+GRIPPER_RANGE = (0.0, 1.5260001)
 
 # [x, y, z, roll, pitch, yaw, gripper] in each arm's neutral frame (home = all zeros)
 READY_POSE = {
@@ -40,6 +41,7 @@ READY_TOLERANCE_DEG = 4
 class Settings:
     wallx_api_key: str
     wallx_url: str
+    local_model_url: str
     robot_ip: str
     laptop_ip: str
     rosbridge_port: int
@@ -65,6 +67,7 @@ def load_settings() -> Settings:
     return Settings(
         wallx_api_key=env["WALLX_API_KEY"],
         wallx_url=env.get("WALLX_URL", "wss://maas-api.x2robot.com/v1/vla/wallx"),
+        local_model_url=env.get("LOCAL_MODEL_URL", ""),
         robot_ip=env["ROBOT_IP"],
         laptop_ip=env["LAPTOP_IP"],
         rosbridge_port=int(env.get("ROSBRIDGE_PORT", 9090)),

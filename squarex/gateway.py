@@ -1,6 +1,6 @@
 """The robot client connects here as if this were the model.
 
-Cloud mode: robot observation -> WALLX request -> WALLX reply -> robot actions, every step logged.
+Inference mode: robot observation -> model request -> model reply -> robot actions, every step logged.
 Ready mode: the gateway answers itself with step-limited moves to the ready pose.
 """
 import msgpack
@@ -8,17 +8,16 @@ from websockets.exceptions import ConnectionClosed
 from websockets.sync.server import ServerConnection, serve
 
 from squarex import runtime
-from squarex.cloud import protocol
-from squarex.cloud.wallx import Wallx
 from squarex.config import Settings
-from squarex.robot.client_format import decode_observation, encode_actions
+from squarex.images import resize
+from squarex.models import MODELS
+from squarex.robot.client_format import Observation, decode_observation, encode_actions
 from squarex.robot.ready_pose import actions_towards_ready_pose
 from squarex.runlog import RunLog
 
 READY_METADATA = msgpack.packb({"model": "ready-pose", "env": "x2robot", "action_horizon": 32}, use_bin_type=True)
-METADATA_FIELDS = ("model", "model_version", "checkpoint", "robot_type", "action_horizon", "row_dt_s")
 
-_cloud_metadata: bytes | None = None   # sent at once to the next robot connection; it gives up after ~5 s
+_metadata_cache: dict[str, bytes] = {}   # sent at once to the next robot connection; it gives up after ~5 s
 
 
 def run(settings: Settings) -> None:
@@ -28,14 +27,14 @@ def run(settings: Settings) -> None:
 
 
 def _handle(robot: ServerConnection, settings: Settings) -> None:
-    mode = runtime.mode()
-    log = RunLog(runtime.run_id(), stream=mode)
-    print(f"robot connected ({mode}), logging to {log.dir}", flush=True)
+    mode, model = runtime.mode(), runtime.model()
+    log = RunLog(runtime.run_id(), stream=mode if mode == runtime.READY else model)
+    print(f"robot connected ({mode}, {model}), logging to {log.dir}", flush=True)
     try:
         if mode == runtime.READY:
             _serve_ready_pose(robot, log)
         else:
-            _serve_cloud(robot, settings, log)
+            _serve_model(robot, settings, model, log)
     except ConnectionClosed:
         pass   # the robot client closes the connection on STOP / CLOSE
     except Exception as error:
@@ -56,28 +55,33 @@ def _serve_ready_pose(robot: ServerConnection, log: RunLog) -> None:
         log.write(step, "laptop -> robot", actions)
 
 
-def _serve_cloud(robot: ServerConnection, settings: Settings, log: RunLog) -> None:
-    global _cloud_metadata
-    if _cloud_metadata:
-        robot.send(_cloud_metadata)
-    with Wallx(settings) as cloud:
-        if not _cloud_metadata:
-            robot.send(cloud.metadata_raw)
-        _cloud_metadata = cloud.metadata_raw
-        log.write(0, "cloud -> laptop (handshake)", {key: cloud.metadata.get(key) for key in METADATA_FIELDS})
+def _resized(observation: Observation, step: int, log: RunLog) -> tuple[Observation, dict[str, str]]:
+    images = {view: resize(jpeg) for view, jpeg in observation.images.items()}
+    files = {view: log.save_image(step, view, jpeg) for view, jpeg in images.items()}
+    return Observation(arms=observation.arms, images=images), files
+
+
+def _serve_model(robot: ServerConnection, settings: Settings, name: str, log: RunLog) -> None:
+    model = MODELS[name]
+    cached = _metadata_cache.get(name)
+    if cached:
+        robot.send(cached)
+    with model.connect(settings) as socket:
+        if not cached:
+            robot.send(socket.metadata_raw)
+        _metadata_cache[name] = socket.metadata_raw
+        log.write(0, f"{name} -> laptop (handshake)", socket.metadata)
 
         for step, raw in enumerate(robot, start=1):
-            observation = decode_observation(raw)
-            log.write(step, "robot -> laptop", {"arms": observation.arms, "images": sorted(observation.images)})
+            observation, image_files = _resized(decode_observation(raw), step, log)
+            log.write(step, "robot -> laptop", {"arms": observation.arms, "images": image_files})
 
-            request = protocol.build_request(observation, runtime.prompt())
-            images = request["observation"]["images"]
-            log.write(step, "laptop -> cloud", {**request, "observation": {
-                **request["observation"], "images": {view: log.save_image(step, view, jpeg) for view, jpeg in images.items()}}})
+            request = model.build_request(observation, runtime.prompt())
+            log.write(step, f"laptop -> {name}", request)
 
-            reply = cloud.infer(request)
-            log.write(step, "cloud -> laptop", reply)
+            reply = socket.exchange(request)
+            log.write(step, f"{name} -> laptop", reply)
 
-            actions = protocol.read_actions(reply)
+            actions = model.read_actions(reply)
             robot.send(encode_actions(actions))
             log.write(step, "laptop -> robot", actions)
